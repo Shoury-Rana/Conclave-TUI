@@ -1,0 +1,20 @@
+# Binaries
+Conclave-TUI.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Local Go cache
+.gocache/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# IDEs
+.idea/
+.vscode/
