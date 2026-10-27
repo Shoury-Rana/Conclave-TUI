@@ -123,6 +123,36 @@ var (
 	HelpKeyStyle = lipgloss.NewStyle().
 			Foreground(ColorAccent).
 			Bold(true)
+
+	// Workspace Item Styles
+	SelectedItemStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(ColorPrimary).
+				Background(lipgloss.Color("#1E1B4B")).
+				Padding(0, 1).
+				MarginBottom(1)
+
+	NormalItemStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorBorderDefault).
+			Padding(0, 1).
+			MarginBottom(1)
+
+	BadgePublicStyle = lipgloss.NewStyle().
+				Foreground(ColorSuccess).
+				Bold(true)
+
+	BadgePrivateStyle = lipgloss.NewStyle().
+				Foreground(ColorWarning).
+				Bold(true)
+
+	BadgeJoinedStyle = lipgloss.NewStyle().
+				Foreground(ColorSecondary).
+				Bold(true)
+
+	MemberCountStyle = lipgloss.NewStyle().
+				Foreground(ColorDimmed).
+				Italic(true)
 )
 
 // AsciiLogo renders a compact, eye-catching Conclave banner.

@@ -31,9 +31,9 @@ type AppModel struct {
 	state  ScreenState
 
 	// Sub-views
-	authView          views.AuthModel
-	workspaceStubView views.WorkspaceStubModel
-	loadingSpinner    spinner.Model
+	authView       views.AuthModel
+	workspaceView  views.WorkspaceModel
+	loadingSpinner spinner.Model
 
 	// Viewport dimensions
 	width  int
@@ -52,7 +52,7 @@ func NewAppModel(cfg *config.Config, client *api.Client) AppModel {
 	}
 
 	authView := views.NewAuthModel(client)
-	workspaceStubView := views.NewWorkspaceStubModel(cfg)
+	workspaceView := views.NewWorkspaceModel(cfg, client)
 
 	initialState := ScreenAuth
 	if cfg.HasTokens() {
@@ -60,12 +60,12 @@ func NewAppModel(cfg *config.Config, client *api.Client) AppModel {
 	}
 
 	return AppModel{
-		cfg:               cfg,
-		client:            client,
-		state:             initialState,
-		authView:          authView,
-		workspaceStubView: workspaceStubView,
-		loadingSpinner:    sp,
+		cfg:            cfg,
+		client:         client,
+		state:          initialState,
+		authView:       authView,
+		workspaceView:  workspaceView,
+		loadingSpinner: sp,
 	}
 }
 
@@ -103,7 +103,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.authView.SetSize(msg.Width, msg.Height)
-		m.workspaceStubView.SetSize(msg.Width, msg.Height)
+		m.workspaceView.SetSize(msg.Width, msg.Height)
 
 	// 2. Global Key Press Events
 	case tea.KeyPressMsg:
@@ -119,8 +119,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleLogoutCmd()
 		}
 
-		// In workspace view, 'q' also quits
-		if key == "q" && m.state == ScreenWorkspace {
+		// In workspace view, 'q' also quits if not typing in an input
+		if key == "q" && m.state == ScreenWorkspace && m.workspaceView.ActiveTenant() != nil {
 			return m, tea.Quit
 		}
 
@@ -135,12 +135,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		_ = m.cfg.Save()
 
-		m.workspaceStubView.SetUser(&api.User{
-			ID:    msg.Me.ID,
-			Email: msg.Me.Email,
-			Name:  msg.Me.Name,
-		})
-		return m, nil
+		return m, m.workspaceView.Init()
 
 	case common.TokenInvalidMsg:
 		// Saved token is invalid or expired
@@ -162,8 +157,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		_ = m.cfg.Save()
 
-		m.workspaceStubView.SetUser(&msg.Response.User)
-		return m, nil
+		return m, m.workspaceView.Init()
 
 	case common.SignupSuccessMsg:
 		m.state = ScreenWorkspace
@@ -176,8 +170,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		_ = m.cfg.Save()
 
-		m.workspaceStubView.SetUser(&msg.Response.User)
-		return m, nil
+		return m, m.workspaceView.Init()
 
 	// 5. Auth Failure
 	case common.AuthErrorMsg:
@@ -205,7 +198,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenWorkspace:
 		var cmd tea.Cmd
-		m.workspaceStubView, cmd = m.workspaceStubView.Update(msg)
+		m.workspaceView, cmd = m.workspaceView.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -218,6 +211,7 @@ func (m *AppModel) handleLogoutCmd() tea.Cmd {
 	m.state = ScreenAuth
 	m.authView = views.NewAuthModel(m.client)
 	m.authView.SetSize(m.width, m.height)
+	m.workspaceView.ClearActiveTenant()
 	return m.authView.Init()
 }
 
@@ -249,7 +243,7 @@ func (m AppModel) View() tea.View {
 		content = m.authView.View()
 
 	case ScreenWorkspace:
-		content = m.workspaceStubView.View()
+		content = m.workspaceView.View()
 	}
 
 	// Declaratively enable AltScreen so the TUI uses a clean full-terminal buffer

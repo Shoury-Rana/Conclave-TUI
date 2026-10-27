@@ -58,12 +58,19 @@ func (c *Client) BaseURL() string {
 	return c.baseURL
 }
 
-// do perform an HTTP request against the Conclave backend, handling JSON marshaling,
-// Bearer authorization injection, response parsing, and error decoding.
-//
-// If a request fails with 401 Unauthorized and a refresh token is available,
-// it automatically attempts to refresh the access token once and retries the request.
+// do performs an HTTP request against the root domain.
 func (c *Client) do(ctx context.Context, method, path string, bodyData any, result any, requiresAuth bool) error {
+	return c.doRequest(ctx, "", method, path, bodyData, result, requiresAuth)
+}
+
+// doTenant performs an HTTP request targeted at a specific workspace subdomain
+// (e.g. acme.lvh.me:8000) using the Host header.
+func (c *Client) doTenant(ctx context.Context, tenantName, method, path string, bodyData any, result any, requiresAuth bool) error {
+	return c.doRequest(ctx, tenantName, method, path, bodyData, result, requiresAuth)
+}
+
+// doRequest performs an HTTP request against either root domain or a workspace subdomain.
+func (c *Client) doRequest(ctx context.Context, tenantName, method, path string, bodyData any, result any, requiresAuth bool) error {
 	reqURL := fmt.Sprintf("%s%s", c.baseURL, path)
 
 	var reqBody io.Reader
@@ -83,6 +90,26 @@ func (c *Client) do(ctx context.Context, method, path string, bodyData any, resu
 	req.Header.Set("Accept", "application/json")
 	if bodyData != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// Subdomain routing: If a tenant is specified, set the Host header so Django's SubDomainMiddleware
+	// resolves the workspace context authoritatively (e.g. acme.lvh.me:8000).
+	if tenantName != "" {
+		host := req.URL.Hostname()
+		port := req.URL.Port()
+		if host == "127.0.0.1" || host == "localhost" {
+			if port != "" {
+				req.Host = fmt.Sprintf("%s.lvh.me:%s", tenantName, port)
+			} else {
+				req.Host = fmt.Sprintf("%s.lvh.me", tenantName)
+			}
+		} else {
+			if port != "" {
+				req.Host = fmt.Sprintf("%s.%s:%s", tenantName, host, port)
+			} else {
+				req.Host = fmt.Sprintf("%s.%s", tenantName, host)
+			}
+		}
 	}
 
 	if requiresAuth {
@@ -108,11 +135,10 @@ func (c *Client) do(ctx context.Context, method, path string, bodyData any, resu
 		c.mu.RUnlock()
 
 		if hasRefresh {
-			// Attempt to refresh token
 			refreshResp, err := c.RefreshToken(ctx)
 			if err == nil && refreshResp != nil && refreshResp.Access != "" {
 				// Retry the original request once with new token
-				return c.do(ctx, method, path, bodyData, result, requiresAuth)
+				return c.doRequest(ctx, tenantName, method, path, bodyData, result, requiresAuth)
 			}
 		}
 	}
